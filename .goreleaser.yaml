@@ -1,0 +1,21 @@
+version: 2
+
+project_name: gohabitica
+
+release:
+  disable: true
+
+builds:
+  - id: gohabitica
+    main: ./cmd/gohabitica
+    binary: gohabitica
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+changelog:
+  disable: true
+
