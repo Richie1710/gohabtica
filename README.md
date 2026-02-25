@@ -15,6 +15,13 @@ An idiomatic Go client and CLI for the [Habitica](https://habitica.com/) API.
 go get github.com/danielrichardt/gohabitica
 ```
 
+Prebuilt CLI binaries for common platforms are published via GitHub Actions:
+
+- On every push to `main` a snapshot build runs and uploads artifacts for Linux, macOS and Windows.
+- On every tag starting with `v` (for example `v1.2.3`) a GitHub Release is created with uploaded archives.
+
+You can download the latest binaries from the **Releases** page of the repository.
+
 ## Configuration
 
 The client and CLI read credentials from either:
