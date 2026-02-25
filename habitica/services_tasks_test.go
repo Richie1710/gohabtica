@@ -105,3 +105,53 @@ func TestTasksService_CreateTodoWithChecklist(t *testing.T) {
 	require.Len(t, task.Checklist, 2)
 }
 
+func TestTasksService_ScoreTask(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/tasks/task-id-4/score/up", r.URL.Path)
+		require.Equal(t, http.MethodPost, r.Method)
+
+		resp := APIResponse[struct{}]{
+			Success: true,
+			Data:    struct{}{},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+
+	client, srv := newTestClient(t, handler)
+	defer srv.Close()
+
+	err := client.Tasks.ScoreTask(context.Background(), UUID("task-id-4"), "up")
+	require.NoError(t, err)
+}
+
+func TestTasksService_ScoreChecklistItem(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/tasks/task-id-5/checklist/item-id-1", r.URL.Path)
+		require.Equal(t, http.MethodPut, r.Method)
+
+		var body struct {
+			Completed bool `json:"completed"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.True(t, body.Completed)
+
+		resp := APIResponse[Task]{
+			Success: true,
+			Data: Task{
+				ID:   "task-id-5",
+				Text: "My Todo",
+				Type: TaskTypeTodo,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+
+	client, srv := newTestClient(t, handler)
+	defer srv.Close()
+
+	err := client.Tasks.UpdateChecklistItemCompleted(context.Background(), UUID("task-id-5"), UUID("item-id-1"), true)
+	require.NoError(t, err)
+}
+

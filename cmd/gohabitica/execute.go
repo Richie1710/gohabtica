@@ -34,7 +34,7 @@ func execute(args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	var cfgPath string
-	fs.StringVar(&cfgPath, "config", "", "Pfad zur YAML-Konfigurationsdatei")
+	fs.StringVar(&cfgPath, "config", "", "Path to a YAML configuration file")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -53,8 +53,12 @@ func execute(args []string) error {
 		return runTodosList(cfgPath, rest[1:])
 	case "todo-delete":
 		return runTodoDelete(cfgPath, rest[1:])
+	case "todo-complete":
+		return runTodoComplete(cfgPath, rest[1:])
+	case "todo-check":
+		return runTodoCheck(cfgPath, rest[1:])
 	default:
-		return fmt.Errorf("unbekannter Befehl %q", rest[0])
+		return fmt.Errorf("unknown command %q", rest[0])
 	}
 }
 
@@ -95,15 +99,15 @@ func runTodo(cfgPath string, args []string) error {
 	var text string
 	var checks stringSliceFlag
 
-	fs.StringVar(&text, "text", "", "Titel des Todos (Pflicht)")
-	fs.Var(&checks, "check", "Ein Checklisten-Eintrag (kann mehrfach angegeben werden)")
+	fs.StringVar(&text, "text", "", "Title of the todo (required)")
+	fs.Var(&checks, "check", "A checklist entry (can be specified multiple times)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	if strings.TrimSpace(text) == "" {
-		return fmt.Errorf("Flag -text ist erforderlich")
+		return fmt.Errorf("flag -text is required")
 	}
 
 	opts := config.Options{ConfigPath: cfgPath}
@@ -125,9 +129,9 @@ func runTodo(cfgPath string, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stdout, "Todo angelegt: %s (ID: %s)\n", task.Text, task.ID)
+	fmt.Fprintf(os.Stdout, "Todo created: %s (ID: %s)\n", task.Text, task.ID)
 	if len(task.Checklist) > 0 {
-		fmt.Fprintln(os.Stdout, "Checkliste:")
+		fmt.Fprintln(os.Stdout, "Checklist:")
 		for _, item := range task.Checklist {
 			fmt.Fprintf(os.Stdout, "  - %s\n", item.Text)
 		}
@@ -165,7 +169,7 @@ func runTodosList(cfgPath string, args []string) error {
 	}
 
 	if len(tasks) == 0 {
-		fmt.Fprintln(os.Stdout, "Keine Todos gefunden.")
+		fmt.Fprintln(os.Stdout, "No todos found.")
 		return nil
 	}
 
@@ -199,13 +203,13 @@ func runTodoDelete(cfgPath string, args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	var id string
-	fs.StringVar(&id, "id", "", "ID der zu löschenden Todo (Pflicht)")
+	fs.StringVar(&id, "id", "", "ID of the todo to delete (required)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if strings.TrimSpace(id) == "" {
-		return fmt.Errorf("Flag -id ist erforderlich")
+		return fmt.Errorf("flag -id is required")
 	}
 
 	opts := config.Options{ConfigPath: cfgPath}
@@ -226,7 +230,112 @@ func runTodoDelete(cfgPath string, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stdout, "Todo mit ID %s wurde gelöscht.\n", id)
+	fmt.Fprintf(os.Stdout, "Todo with ID %s has been deleted.\n", id)
+	return nil
+}
+
+// runTodoComplete marks a todo as completed by scoring it "up".
+//
+// Example usage:
+//   gohabitica todo-complete -id "37ceed6f-0772-43bb-a177-39d3074f75b7"
+//   gohabitica -config config/local.yaml todo-complete -id "..."
+func runTodoComplete(cfgPath string, args []string) error {
+	fs := flag.NewFlagSet("todo-complete", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	var id string
+	fs.StringVar(&id, "id", "", "ID of the todo to complete (required)")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("flag -id is required")
+	}
+
+	opts := config.Options{ConfigPath: cfgPath}
+	cfg, err := config.Load(opts)
+	if err != nil {
+		return err
+	}
+
+	client, err := habitica.NewClient(cfg)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.Tasks.ScoreTask(ctx, habitica.UUID(id), "up"); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stdout, "Todo with ID %s has been completed.\n", id)
+	return nil
+}
+
+// runTodoCheck toggles a checklist item of a todo by its 1-based index.
+//
+// Example usage:
+//   gohabitica todo-check -id "37ceed6f-0772-43bb-a177-39d3074f75b7" -index 1
+//   gohabitica -config config/local.yaml todo-check -id "..." -index 2
+func runTodoCheck(cfgPath string, args []string) error {
+	fs := flag.NewFlagSet("todo-check", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	var (
+		id    string
+		index int
+	)
+
+	fs.StringVar(&id, "id", "", "ID of the todo that owns the checklist item (required)")
+	fs.IntVar(&index, "index", 0, "1-based index of the checklist item to toggle (required)")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("flag -id is required")
+	}
+	if index <= 0 {
+		return fmt.Errorf("flag -index must be greater than zero")
+	}
+
+	opts := config.Options{ConfigPath: cfgPath}
+	cfg, err := config.Load(opts)
+	if err != nil {
+		return err
+	}
+
+	client, err := habitica.NewClient(cfg)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	task, err := client.Tasks.GetTask(ctx, habitica.UUID(id))
+	if err != nil {
+		return err
+	}
+	if task.Type != habitica.TaskTypeTodo {
+		return fmt.Errorf("task %s is not a todo", id)
+	}
+	if len(task.Checklist) == 0 {
+		return fmt.Errorf("todo %s has no checklist items", id)
+	}
+	if index > len(task.Checklist) {
+		return fmt.Errorf("flag -index is out of range: todo %s only has %d checklist items", id, len(task.Checklist))
+	}
+
+	item := task.Checklist[index-1]
+	if err := client.Tasks.UpdateChecklistItemCompleted(ctx, task.ID, item.ID, !item.Completed); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stdout, "Checklist item #%d (%q) on todo %s has been toggled.\n", index, item.Text, task.ID)
 	return nil
 }
 

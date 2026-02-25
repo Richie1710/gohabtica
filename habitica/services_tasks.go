@@ -71,6 +71,25 @@ func (s *TasksService) CreateTodoWithChecklist(ctx context.Context, text string,
 	return s.CreateTask(ctx, req)
 }
 
+// ScoreTask scores a task in the given direction ("up" or "down").
+// For todos, "up" marks the task as completed.
+func (s *TasksService) ScoreTask(ctx context.Context, id UUID, direction string) error {
+	if direction != "up" && direction != "down" {
+		return fmt.Errorf("direction must be \"up\" or \"down\"")
+	}
+	return s.client.doRequest(ctx, "POST", fmt.Sprintf("/tasks/%s/score/%s", id, direction), nil, nil, nil)
+}
+
+// UpdateChecklistItemCompleted sets the completion state of a checklist item belonging to a task.
+func (s *TasksService) UpdateChecklistItemCompleted(ctx context.Context, taskID, itemID UUID, completed bool) error {
+	payload := struct {
+		Completed bool `json:"completed"`
+	}{
+		Completed: completed,
+	}
+	return s.client.doRequest(ctx, "PUT", fmt.Sprintf("/tasks/%s/checklist/%s", taskID, itemID), nil, &payload, nil)
+}
+
 // UpdateTask updates an existing task (PUT /tasks/:id).
 func (s *TasksService) UpdateTask(ctx context.Context, id UUID, in *TaskUpdateRequest) (*Task, error) {
 	var t Task
