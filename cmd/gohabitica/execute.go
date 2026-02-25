@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,11 +97,15 @@ func runTodo(cfgPath string, args []string) error {
 	fs := flag.NewFlagSet("todo", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	var text string
-	var checks stringSliceFlag
+	var (
+		text       string
+		checks     stringSliceFlag
+		difficulty string
+	)
 
 	fs.StringVar(&text, "text", "", "Title of the todo (required)")
 	fs.Var(&checks, "check", "A checklist entry (can be specified multiple times)")
+	fs.StringVar(&difficulty, "difficulty", "", "Difficulty/priority of the todo (trivial, easy, medium, hard, or numeric)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -108,6 +113,15 @@ func runTodo(cfgPath string, args []string) error {
 
 	if strings.TrimSpace(text) == "" {
 		return fmt.Errorf("flag -text is required")
+	}
+
+	priority := 1.0
+	if strings.TrimSpace(difficulty) != "" {
+		p, err := parseDifficulty(difficulty)
+		if err != nil {
+			return err
+		}
+		priority = p
 	}
 
 	opts := config.Options{ConfigPath: cfgPath}
@@ -124,7 +138,26 @@ func runTodo(cfgPath string, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	task, err := client.Tasks.CreateTodoWithChecklist(ctx, text, checks)
+	items := make([]habitica.ChecklistItem, 0, len(checks))
+	for _, c := range checks {
+		if c == "" {
+			continue
+		}
+		items = append(items, habitica.ChecklistItem{
+			Text:      c,
+			Completed: false,
+		})
+	}
+
+	req := &habitica.TaskCreateRequest{
+		Text:      text,
+		Type:      habitica.TaskTypeTodo,
+		Priority:  priority,
+		Attribute: "str",
+		Checklist: items,
+	}
+
+	task, err := client.Tasks.CreateTask(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -138,6 +171,33 @@ func runTodo(cfgPath string, args []string) error {
 	}
 
 	return nil
+}
+
+// parseDifficulty converts a human-friendly difficulty string into a Habitica priority value.
+// Accepts the named levels "trivial", "easy", "medium", "hard" (case-insensitive)
+// or a numeric value (e.g. 0.1, 1, 1.5, 2).
+func parseDifficulty(input string) (float64, error) {
+	s := strings.ToLower(strings.TrimSpace(input))
+
+	switch s {
+	case "trivial":
+		return 0.1, nil
+	case "easy":
+		return 1, nil
+	case "medium":
+		return 1.5, nil
+	case "hard":
+		return 2, nil
+	}
+
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid difficulty %q; expected one of trivial, easy, medium, hard, or a numeric value", input)
+	}
+	if v <= 0 || v > 2 {
+		return 0, fmt.Errorf("difficulty %q is out of allowed range (0 < value <= 2)", input)
+	}
+	return v, nil
 }
 
 // runTodosList lists the user's todos together with their checklist entries.
