@@ -122,7 +122,7 @@ No other global flags are currently supported.
 
 - **Synopsis**:
   ```bash
-  gohabitica [ -config <path> ] todo -text "<title>" [ -check "<item1>" ... ]
+  gohabitica [ -config <path> ] todo -text "<title>" [ -difficulty "<level>" ] [ -check "<item1>" ... ]
   ```
 
 - **Description**:
@@ -133,6 +133,10 @@ No other global flags are currently supported.
     - **Type**: string
     - **Required**: Yes
     - **Meaning**: Title of the todo.
+  - `-difficulty <string>`
+    - **Type**: string
+    - **Required**: No
+    - **Meaning**: Difficulty/priority of the todo. Accepts the named levels `trivial`, `easy`, `medium`, `hard` (case-insensitive) or a numeric value (e.g. `0.1`, `1`, `1.5`, `2`). Defaults to Habitica's normal difficulty.
   - `-check <string>`
     - **Type**: string, **repeatable**
     - **Required**: No
@@ -143,8 +147,12 @@ No other global flags are currently supported.
   # Simple todo without checklist
   gohabitica todo -text "Buy groceries"
 
+  # Todo with explicit difficulty
+  gohabitica todo -text "Buy groceries" -difficulty "hard"
+
   # Todo with multiple checklist items
   gohabitica todo -text "Buy groceries" \
+    -difficulty "medium" \
     -check "Milk" \
     -check "Bread" \
     -check "Eggs"
@@ -340,6 +348,7 @@ This section summarizes commands and flags in a structure that is easy for tools
   - **Purpose**: create a new todo with optional checklist.
   - **Flags**:
     - `-text <string>` – required
+    - `-difficulty <string>` – optional
     - `-check <string>` – optional, repeatable
 
 - **Command**: `todos`
